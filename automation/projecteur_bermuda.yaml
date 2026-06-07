@@ -98,16 +98,26 @@ blueprint:
           min: 1
           max: 30
           mode: box
-    notify_services:
+    notify_targets:
       name: Services de notification "maison vide"
       description: >
-        Noms des services notify à appeler, SANS le préfixe "notify."
-        (ex : mobile_app_pixel, telegram_maison). Ajoute-en autant que tu veux ;
-        laisser vide = aucune notification. Tu les trouves dans
-        Outils de développement → Actions en tapant "notify.".
+        Sélectionne une ou plusieurs entités de notification (notify.*) — appli
+        mobile, etc. Vide = aucune notification.
       default: []
       selector:
-        text:
+        entity:
+          domain: notify
+          multiple: true
+    test_button:
+      name: Bouton de test des notifications (optionnel)
+      description: >
+        Optionnel. Crée un assistant "Bouton" (Paramètres → Appareils & services
+        → Assistants → Bouton) et sélectionne-le ici : appuyer dessus enverra une
+        notif de test à toutes les cibles ci-dessus. Laisser vide pour désactiver.
+      default: []
+      selector:
+        entity:
+          domain: input_button
           multiple: true
     sun_entity:
       name: Entité soleil
@@ -150,7 +160,7 @@ variables:
   driveway_area_name: "{{ area_name(driveway_area_id) }}"
   away_min_seconds: !input away_min_seconds
   light_entity: !input light_entity
-  notify_services: !input notify_services
+  notify_targets: !input notify_targets
 
 triggers:
   - trigger: state
@@ -179,6 +189,9 @@ triggers:
     entity_id: !input sun_entity
     to: above_horizon
     id: lever
+  - trigger: state
+    entity_id: !input test_button
+    id: test
 
 conditions: []
 
@@ -308,13 +321,32 @@ actions:
                 {% endif %}
               {% endfor %}
               {{ ns.home == 0 and ns.maxent == trigger.entity_id }}
+          - condition: template
+            value_template: "{{ notify_targets | count > 0 }}"
         sequence:
-          - repeat:
-              for_each: "{{ notify_services }}"
-              sequence:
-                - action: "notify.{{ repeat.item }}"
-                  data:
-                    title: 🏠 Maison vide
-                    message: >-
-                      Plus aucun badge personne (K) présent.
-                      Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
+          - action: notify.send_message
+            target:
+              entity_id: !input notify_targets
+            data:
+              title: 🏠 Maison vide
+              message: >-
+                Plus aucun badge personne (K) présent.
+                Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
+
+  # ── 5. Test des notifications (bouton optionnel) ──
+  - alias: Test notifications
+    choose:
+      - conditions:
+          - condition: trigger
+            id: test
+          - condition: template
+            value_template: "{{ notify_targets | count > 0 }}"
+        sequence:
+          - action: notify.send_message
+            target:
+              entity_id: !input notify_targets
+            data:
+              title: ✅ Test notification
+              message: >-
+                Test des cibles de notification du projecteur Nord —
+                {{ now().strftime('%d/%m/%Y %H:%M:%S') }}.
