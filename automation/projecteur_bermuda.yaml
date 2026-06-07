@@ -1,0 +1,310 @@
+blueprint:
+  name: Projecteur extérieur - présence Bermuda (badges K personnes / C véhicules)
+  description: >
+    Allume une lumière extérieure à l'arrivée la nuit (mode au choix) ; l'éteint
+    quand une PERSONNE (K) QUI VIENT D'ARRIVER entre dans la maison (proxy ≠
+    allée) ; filet de sécurité (timeout / lever du soleil) ; notification Telegram
+    "maison vide" quand plus aucun badge K n'est présent. Anti faux-positifs
+    reboot WiFi via le compteur de proxies Bermuda.
+    Les listes sont éditables dans n'importe quel ordre (le capteur AREA retrouve
+    son tracker par le nom de l'appareil).
+  domain: automation
+  input:
+    person_trackers:
+      name: Trackers PERSONNES (badges K)
+      description: device_tracker Bermuda des personnes.
+      selector:
+        entity:
+          domain: device_tracker
+          multiple: true
+    person_area_sensors:
+      name: Capteurs AREA des personnes (badges K)
+      description: Sensors *_area Bermuda des personnes (ordre indifférent).
+      selector:
+        entity:
+          domain: sensor
+          multiple: true
+    vehicle_trackers:
+      name: Trackers VÉHICULES (badges C)
+      description: device_tracker Bermuda des véhicules.
+      selector:
+        entity:
+          domain: device_tracker
+          multiple: true
+    allumage_mode:
+      name: Condition d'allumage la nuit
+      description: >
+        "N'importe lequel" = un K OU un C (recommandé : couvre voiture seule,
+        personne à pied, ou les deux).
+      default: any
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: "N'importe quel badge (K ou C) — recommandé"
+              value: any
+            - label: "Seulement un véhicule (C)"
+              value: vehicle
+            - label: "Seulement une personne (K)"
+              value: person
+            - label: "Véhicule ET personne ensemble"
+              value: together
+    together_window:
+      name: Fenêtre de simultanéité pour le mode "ensemble" (secondes)
+      default: 60
+      selector:
+        number:
+          min: 5
+          max: 600
+          unit_of_measurement: s
+          mode: box
+    arrival_window:
+      name: Fenêtre "vient d'arriver" pour l'extinction (secondes)
+      description: >
+        Seul un badge K dont le tracker est passé à "home" depuis moins de ce
+        délai peut éteindre la lumière en entrant. Empêche qu'une personne déjà
+        installée qui change de pièce coupe la lumière.
+      default: 300
+      selector:
+        number:
+          min: 30
+          max: 1800
+          unit_of_measurement: s
+          mode: box
+    light_entity:
+      name: Lumière à piloter
+      selector:
+        entity:
+          domain: light
+    driveway_area:
+      name: Nom de la zone "allée" (proxy extérieur)
+      description: Valeur exacte du sensor _area quand le badge est vu par le proxy de l'allée.
+      default: "Salle de bain travaux"
+      selector:
+        text: {}
+    proxy_count_sensor:
+      name: Capteur "nombre de proxies actifs" Bermuda
+      default: sensor.bermuda_global_active_proxy_count
+      selector:
+        entity:
+          domain: sensor
+    min_active_proxies:
+      name: Proxies actifs minimum (en dessous = reboot, on ignore)
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 30
+          mode: box
+    telegram_config_entry:
+      name: Telegram config_entry_id
+      selector:
+        text: {}
+    sun_entity:
+      name: Entité soleil
+      default: sun.sun
+      selector:
+        entity:
+          domain: sun
+    away_min_seconds:
+      name: Absence minimale avant allumage (secondes)
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: s
+          mode: box
+    depart_delay:
+      name: Délai de confirmation "départ" (anti-reboot)
+      default: {hours: 0, minutes: 3, seconds: 0}
+      selector:
+        duration: {}
+    light_timeout:
+      name: Extinction de sécurité (timeout)
+      default: {hours: 0, minutes: 10, seconds: 0}
+      selector:
+        duration: {}
+
+mode: queued
+max: 10
+
+variables:
+  person_trackers: !input person_trackers
+  vehicle_trackers: !input vehicle_trackers
+  allumage_mode: !input allumage_mode
+  together_window: !input together_window
+  arrival_window: !input arrival_window
+  proxy_count_sensor: !input proxy_count_sensor
+  min_active_proxies: !input min_active_proxies
+  driveway_area: !input driveway_area
+  away_min_seconds: !input away_min_seconds
+  light_entity: !input light_entity
+
+triggers:
+  - trigger: state
+    entity_id: !input person_trackers
+    to: home
+    id: arrivee
+  - trigger: state
+    entity_id: !input vehicle_trackers
+    to: home
+    id: arrivee
+  - trigger: state
+    entity_id: !input person_area_sensors
+    for: "00:00:20"
+    id: entree
+  - trigger: state
+    entity_id: !input person_trackers
+    to: not_home
+    for: !input depart_delay
+    id: depart
+  - trigger: state
+    entity_id: !input light_entity
+    to: "on"
+    for: !input light_timeout
+    id: timeout
+  - trigger: state
+    entity_id: !input sun_entity
+    to: above_horizon
+    id: lever
+
+conditions: []
+
+actions:
+  # ── 1. Allumage (mode au choix) ──
+  - alias: Allumage
+    choose:
+      - conditions:
+          - condition: trigger
+            id: arrivee
+          - condition: state
+            entity_id: !input sun_entity
+            state: below_horizon
+          - condition: state
+            entity_id: !input light_entity
+            state: "off"
+          - condition: template
+            value_template: "{{ states(proxy_count_sensor) | int(0) >= min_active_proxies }}"
+          - condition: template
+            value_template: >
+              {{ trigger.from_state is not none
+                 and trigger.from_state.state != 'home'
+                 and (now() - trigger.from_state.last_changed).total_seconds() > away_min_seconds }}
+          - condition: template
+            value_template: >
+              {% set me = trigger.entity_id %}
+              {% set is_person = me in person_trackers %}
+              {% set is_vehicle = me in vehicle_trackers %}
+              {% if allumage_mode == 'vehicle' %}
+                {{ is_vehicle }}
+              {% elif allumage_mode == 'person' %}
+                {{ is_person }}
+              {% elif allumage_mode == 'together' %}
+                {% set ns = namespace(v=false, k=false) %}
+                {% for e in vehicle_trackers %}
+                  {% if is_state(e,'home')
+                        and (now()-states[e].last_changed).total_seconds() < together_window %}
+                    {% set ns.v = true %}
+                  {% endif %}
+                {% endfor %}
+                {% for e in person_trackers %}
+                  {% if is_state(e,'home')
+                        and (now()-states[e].last_changed).total_seconds() < together_window %}
+                    {% set ns.k = true %}
+                  {% endif %}
+                {% endfor %}
+                {{ ns.v and ns.k }}
+              {% else %}
+                true
+              {% endif %}
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: !input light_entity
+
+  # ── 2. Extinction : un K qui vient d'arriver (matching nom exact + repli) entre dans la maison ──
+  - alias: Extinction entrée maison
+    choose:
+      - conditions:
+          - condition: trigger
+            id: entree
+          - condition: template
+            value_template: >
+              {{ trigger.to_state.state
+                 not in [driveway_area, 'not_home', 'unknown', 'unavailable'] }}
+          - condition: template
+            value_template: >
+              {% set base = trigger.entity_id | replace('sensor.', '') | replace('_area', '') %}
+              {% set guess = 'device_tracker.' ~ base ~ '_bermuda_tracker' %}
+              {% set ns = namespace(tracker=none) %}
+              {% if guess in person_trackers %}
+                {% set ns.tracker = guess %}
+              {% else %}
+                {% for t in person_trackers %}
+                  {% if base in t %}{% set ns.tracker = t %}{% endif %}
+                {% endfor %}
+              {% endif %}
+              {{ ns.tracker is not none
+                 and is_state(ns.tracker, 'home')
+                 and (now() - states[ns.tracker].last_changed).total_seconds() < arrival_window }}
+          - condition: state
+            entity_id: !input light_entity
+            state: "on"
+          - condition: template
+            value_template: "{{ (now() - states[light_entity].last_changed).total_seconds() > 30 }}"
+        sequence:
+          - action: light.turn_off
+            target:
+              entity_id: !input light_entity
+
+  # ── 3. Filet de sécurité ──
+  - alias: Filet de sécurité
+    choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: timeout
+              - condition: trigger
+                id: lever
+          - condition: state
+            entity_id: !input light_entity
+            state: "on"
+        sequence:
+          - action: light.turn_off
+            target:
+              entity_id: !input light_entity
+
+  # ── 4. Maison vide : plus aucun K présent (dédupliqué : dernier parti) ──
+  - alias: Maison vide
+    choose:
+      - conditions:
+          - condition: trigger
+            id: depart
+          - condition: template
+            value_template: "{{ states(proxy_count_sensor) | int(0) >= min_active_proxies }}"
+          - condition: template
+            value_template: >
+              {% set ns = namespace(home=0, maxlc=none, maxent='') %}
+              {% for e in person_trackers %}
+                {% if is_state(e, 'home') %}{% set ns.home = ns.home + 1 %}{% endif %}
+                {% set lc = states[e].last_changed %}
+                {% if ns.maxlc is none or lc > ns.maxlc
+                      or (lc == ns.maxlc and e > ns.maxent) %}
+                  {% set ns.maxlc = lc %}
+                  {% set ns.maxent = e %}
+                {% endif %}
+              {% endfor %}
+              {{ ns.home == 0 and ns.maxent == trigger.entity_id }}
+        sequence:
+          - action: telegram_bot.send_message
+            data:
+              config_entry_id: !input telegram_config_entry
+              message: >-
+                🏠 *Maison vide*
+
+                Plus aucun badge personne (K) présent.
+
+                Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
+              parse_mode: markdown
