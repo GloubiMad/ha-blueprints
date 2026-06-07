@@ -78,8 +78,10 @@ blueprint:
           domain: light
     driveway_area:
       name: Nom de la zone "allée" (proxy extérieur)
-      description: Valeur exacte du sensor _area quand le badge est vu par le proxy de l'allée.
-      default: "Salle de bain travaux"
+      description: >
+        Valeur EXACTE du sensor _area quand le badge est vu par le proxy le plus
+        proche de l'allée (le nom de la pièce/zone de ce proxy). C'est la zone
+        "extérieure" : tant qu'un badge y est vu, il est considéré dehors.
       selector:
         text: {}
     proxy_count_sensor:
