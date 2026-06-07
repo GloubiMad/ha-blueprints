@@ -3,8 +3,8 @@ blueprint:
   description: >
     Allume une lumière extérieure à l'arrivée la nuit (mode au choix) ; l'éteint
     quand une PERSONNE (K) QUI VIENT D'ARRIVER entre dans la maison (proxy ≠
-    allée) ; filet de sécurité (timeout / lever du soleil) ; notification Telegram
-    "maison vide" quand plus aucun badge K n'est présent. Anti faux-positifs
+    allée) ; filet de sécurité (timeout / lever du soleil) ; notification(s) via
+    les services notify HA "maison vide" quand plus aucun badge K n'est présent. Anti faux-positifs
     reboot WiFi via le compteur de proxies Bermuda.
     Les listes sont éditables dans n'importe quel ordre (le capteur AREA retrouve
     son tracker par le nom de l'appareil).
@@ -98,10 +98,17 @@ blueprint:
           min: 1
           max: 30
           mode: box
-    telegram_config_entry:
-      name: Telegram config_entry_id
+    notify_services:
+      name: Services de notification "maison vide"
+      description: >
+        Noms des services notify à appeler, SANS le préfixe "notify."
+        (ex : mobile_app_pixel, telegram_maison). Ajoute-en autant que tu veux ;
+        laisser vide = aucune notification. Tu les trouves dans
+        Outils de développement → Actions en tapant "notify.".
+      default: []
       selector:
-        text: {}
+        text:
+          multiple: true
     sun_entity:
       name: Entité soleil
       default: sun.sun
@@ -143,6 +150,7 @@ variables:
   driveway_area_name: "{{ area_name(driveway_area_id) }}"
   away_min_seconds: !input away_min_seconds
   light_entity: !input light_entity
+  notify_services: !input notify_services
 
 triggers:
   - trigger: state
@@ -301,13 +309,12 @@ actions:
               {% endfor %}
               {{ ns.home == 0 and ns.maxent == trigger.entity_id }}
         sequence:
-          - action: telegram_bot.send_message
-            data:
-              config_entry_id: !input telegram_config_entry
-              message: >-
-                🏠 *Maison vide*
-
-                Plus aucun badge personne (K) présent.
-
-                Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
-              parse_mode: markdown
+          - repeat:
+              for_each: "{{ notify_services }}"
+              sequence:
+                - action: "notify.{{ repeat.item }}"
+                  data:
+                    title: 🏠 Maison vide
+                    message: >-
+                      Plus aucun badge personne (K) présent.
+                      Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
