@@ -108,6 +108,17 @@ blueprint:
         entity:
           domain: notify
           multiple: true
+    telegram_config_entry:
+      name: Telegram - config_entry_id (optionnel, MarkdownV2)
+      description: >
+        Optionnel. ID de config_entry de ton bot Telegram. Si renseigné, le
+        message "maison vide" est AUSSI envoyé à Telegram en MarkdownV2 (formaté)
+        via telegram_bot.send_message. Laisser vide pour ne pas l'utiliser.
+        Ne mets pas ta cible Telegram à la fois ici et dans la liste ci-dessus
+        (sinon double envoi).
+      default: ""
+      selector:
+        text: {}
     sun_entity:
       name: Entité soleil
       default: sun.sun
@@ -150,6 +161,7 @@ variables:
   away_min_seconds: !input away_min_seconds
   light_entity: !input light_entity
   notify_targets: !input notify_targets
+  telegram_config_entry: !input telegram_config_entry
 
 triggers:
   - trigger: state
@@ -307,14 +319,32 @@ actions:
                 {% endif %}
               {% endfor %}
               {{ ns.home == 0 and ns.maxent == trigger.entity_id }}
-          - condition: template
-            value_template: "{{ notify_targets | count > 0 }}"
         sequence:
-          - action: notify.send_message
-            target:
-              entity_id: !input notify_targets
-            data:
-              title: 🏠 Maison vide
-              message: >-
-                Plus aucun badge personne (K) présent.
-                Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
+          # Notification générique (texte simple) vers les entités notify choisies
+          - if:
+              - condition: template
+                value_template: "{{ notify_targets | count > 0 }}"
+            then:
+              - action: notify.send_message
+                target:
+                  entity_id: !input notify_targets
+                data:
+                  title: 🏠 Maison vide
+                  message: >-
+                    Plus aucun badge personne (K) présent.
+                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
+          # Telegram en MarkdownV2 (si un config_entry_id est renseigné)
+          - if:
+              - condition: template
+                value_template: "{{ telegram_config_entry | length > 0 }}"
+            then:
+              - action: telegram_bot.send_message
+                data:
+                  config_entry_id: !input telegram_config_entry
+                  parse_mode: markdownv2
+                  message: >-
+                    *🏠 Maison vide*
+
+                    Plus aucun badge personne \(K\) présent\.
+
+                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}
