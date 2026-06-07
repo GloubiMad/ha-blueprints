@@ -108,17 +108,6 @@ blueprint:
         entity:
           domain: notify
           multiple: true
-    test_button:
-      name: Bouton de test des notifications (optionnel)
-      description: >
-        Optionnel. Crée un assistant "Bouton" (Paramètres → Appareils & services
-        → Assistants → Bouton) et sélectionne-le ici : appuyer dessus enverra une
-        notif de test à toutes les cibles ci-dessus. Laisser vide pour désactiver.
-      default: []
-      selector:
-        entity:
-          domain: input_button
-          multiple: true
     sun_entity:
       name: Entité soleil
       default: sun.sun
@@ -189,9 +178,6 @@ triggers:
     entity_id: !input sun_entity
     to: above_horizon
     id: lever
-  - trigger: state
-    entity_id: !input test_button
-    id: test
 
 conditions: []
 
@@ -332,21 +318,3 @@ actions:
               message: >-
                 Plus aucun badge personne (K) présent.
                 Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
-
-  # ── 5. Test des notifications (bouton optionnel) ──
-  - alias: Test notifications
-    choose:
-      - conditions:
-          - condition: trigger
-            id: test
-          - condition: template
-            value_template: "{{ notify_targets | count > 0 }}"
-        sequence:
-          - action: notify.send_message
-            target:
-              entity_id: !input notify_targets
-            data:
-              title: ✅ Test notification
-              message: >-
-                Test des cibles de notification du projecteur Nord —
-                {{ now().strftime('%d/%m/%Y %H:%M:%S') }}.

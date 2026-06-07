@@ -12,7 +12,6 @@ Pilote une lumière extérieure à partir de trackers BLE [Bermuda](https://gith
 - **Extinction** quand une personne (badge K) qui vient d'arriver entre dans la maison (proxy ≠ allée).
 - **Filet de sécurité** : extinction après un timeout ou au lever du soleil.
 - **Notification(s) « maison vide »** vers une ou plusieurs entités `notify` (sélectionnables dans une liste) quand plus aucun badge K n'est présent.
-- **Bouton de test optionnel** : associe un assistant `input_button` pour envoyer une notif de test aux cibles sélectionnées.
 - **Anti faux-positifs reboot WiFi** via le compteur de proxies Bermuda (`sensor.bermuda_global_active_proxy_count`).
 
 Convention de badges : noms se terminant par **K** = personnes, par **C** = véhicules. Les véhicules ne comptent pas pour « maison vide ».
