@@ -77,13 +77,13 @@ blueprint:
         entity:
           domain: light
     driveway_area:
-      name: Nom de la zone "allée" (proxy extérieur)
+      name: Pièce "allée" (proxy extérieur)
       description: >
-        Valeur EXACTE du sensor _area quand le badge est vu par le proxy le plus
-        proche de l'allée (le nom de la pièce/zone de ce proxy). C'est la zone
-        "extérieure" : tant qu'un badge y est vu, il est considéré dehors.
+        La pièce (zone Home Assistant) assignée au proxy Bluetooth le plus proche
+        de l'allée. Tant qu'un badge n'est vu que par ce proxy il est considéré
+        dehors ; dès qu'il est vu par un proxy d'une AUTRE pièce, il est rentré.
       selector:
-        text: {}
+        area: {}
     proxy_count_sensor:
       name: Capteur "nombre de proxies actifs" Bermuda
       default: sensor.bermuda_global_active_proxy_count
@@ -139,7 +139,8 @@ variables:
   arrival_window: !input arrival_window
   proxy_count_sensor: !input proxy_count_sensor
   min_active_proxies: !input min_active_proxies
-  driveway_area: !input driveway_area
+  driveway_area_id: !input driveway_area
+  driveway_area_name: "{{ area_name(driveway_area_id) }}"
   away_min_seconds: !input away_min_seconds
   light_entity: !input light_entity
 
@@ -234,7 +235,7 @@ actions:
           - condition: template
             value_template: >
               {{ trigger.to_state.state
-                 not in [driveway_area, 'not_home', 'unknown', 'unavailable'] }}
+                 not in [driveway_area_name, 'not_home', 'unknown', 'unavailable'] }}
           - condition: template
             value_template: >
               {% set base = trigger.entity_id | replace('sensor.', '') | replace('_area', '') %}
