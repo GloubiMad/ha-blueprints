@@ -1,0 +1,16 @@
+# Production solaire totale = somme des 6 strings PV nettoyees.
+# Se recalcule automatiquement quand un des 6 capteurs clean change.
+template:
+  - sensor:
+      - name: "Production Solaire Totale"
+        unique_id: production_solaire_totale
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {{ (states('sensor.zendure_pv1_clean') | float(0)) +
+             (states('sensor.zendure_pv2_clean') | float(0)) +
+             (states('sensor.apsystems_est_pv1_clean') | float(0)) +
+             (states('sensor.apsystems_est_pv2_clean') | float(0)) +
+             (states('sensor.apsystems_sud_pv1_clean') | float(0)) +
+             (states('sensor.apsystems_sud_pv2_clean') | float(0)) }}

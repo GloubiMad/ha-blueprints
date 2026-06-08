@@ -1,0 +1,59 @@
+# Capteurs PV "clean" anti-glitch des 2 MPPT du Zendure Hyper #1 (glagla).
+# Ignore un 0 soudain si la valeur precedente > 20W (glitch de qq s),
+# accepte un 0 persistant > 1 min (vraie coupure), garde this.state si unavailable.
+template:
+  # ==== Zendure Hyper PV1 ====
+  - trigger:
+      - trigger: state
+        entity_id: sensor.hyper_2000_glagla_solar_power1
+        id: change
+      - trigger: numeric_state
+        entity_id: sensor.hyper_2000_glagla_solar_power1
+        below: 1
+        for: "00:01:00"
+        id: zero_persistant
+    sensor:
+      - name: "Zendure PV1 Clean"
+        unique_id: zendure_pv1_clean
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set v = states('sensor.hyper_2000_glagla_solar_power1') %}
+          {% if trigger.id == 'zero_persistant' %}
+            0
+          {% elif v in ['unavailable', 'unknown', 'none', None] %}
+            {{ this.state | float(0) }}
+          {% elif (v | float(0)) == 0 and (this.state | float(0)) > 20 %}
+            {{ this.state | float(0) }}
+          {% else %}
+            {{ v | float(0) }}
+          {% endif %}
+
+  # ==== Zendure Hyper PV2 ====
+  - trigger:
+      - trigger: state
+        entity_id: sensor.hyper_2000_glagla_solar_power2
+        id: change
+      - trigger: numeric_state
+        entity_id: sensor.hyper_2000_glagla_solar_power2
+        below: 1
+        for: "00:01:00"
+        id: zero_persistant
+    sensor:
+      - name: "Zendure PV2 Clean"
+        unique_id: zendure_pv2_clean
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set v = states('sensor.hyper_2000_glagla_solar_power2') %}
+          {% if trigger.id == 'zero_persistant' %}
+            0
+          {% elif v in ['unavailable', 'unknown', 'none', None] %}
+            {{ this.state | float(0) }}
+          {% elif (v | float(0)) == 0 and (this.state | float(0)) > 20 %}
+            {{ this.state | float(0) }}
+          {% else %}
+            {{ v | float(0) }}
+          {% endif %}

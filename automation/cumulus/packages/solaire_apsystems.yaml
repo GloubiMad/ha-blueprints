@@ -1,0 +1,114 @@
+# Capteurs PV "clean" anti-glitch des 2 APsystems EZ1 (Est + Sud), 2 strings chacun.
+# Meme logique que solaire_zendure.yaml.
+template:
+  # ==== APsystems EST PV1 ====
+  - trigger:
+      - trigger: state
+        entity_id: sensor.solar_power_of_p1
+        id: change
+      - trigger: numeric_state
+        entity_id: sensor.solar_power_of_p1
+        below: 1
+        for: "00:01:00"
+        id: zero_persistant
+    sensor:
+      - name: "APsystems Est PV1 Clean"
+        unique_id: apsystems_est_pv1_clean
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set v = states('sensor.solar_power_of_p1') %}
+          {% if trigger.id == 'zero_persistant' %}
+            0
+          {% elif v in ['unavailable', 'unknown', 'none', None] %}
+            {{ this.state | float(0) }}
+          {% elif (v | float(0)) == 0 and (this.state | float(0)) > 20 %}
+            {{ this.state | float(0) }}
+          {% else %}
+            {{ v | float(0) }}
+          {% endif %}
+
+  # ==== APsystems EST PV2 ====
+  - trigger:
+      - trigger: state
+        entity_id: sensor.solar_power_of_p2
+        id: change
+      - trigger: numeric_state
+        entity_id: sensor.solar_power_of_p2
+        below: 1
+        for: "00:01:00"
+        id: zero_persistant
+    sensor:
+      - name: "APsystems Est PV2 Clean"
+        unique_id: apsystems_est_pv2_clean
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set v = states('sensor.solar_power_of_p2') %}
+          {% if trigger.id == 'zero_persistant' %}
+            0
+          {% elif v in ['unavailable', 'unknown', 'none', None] %}
+            {{ this.state | float(0) }}
+          {% elif (v | float(0)) == 0 and (this.state | float(0)) > 20 %}
+            {{ this.state | float(0) }}
+          {% else %}
+            {{ v | float(0) }}
+          {% endif %}
+
+  # ==== APsystems SUD PV1 ====
+  - trigger:
+      - trigger: state
+        entity_id: sensor.solar_1_sud_ok_power_of_p1
+        id: change
+      - trigger: numeric_state
+        entity_id: sensor.solar_1_sud_ok_power_of_p1
+        below: 1
+        for: "00:01:00"
+        id: zero_persistant
+    sensor:
+      - name: "APsystems Sud PV1 Clean"
+        unique_id: apsystems_sud_pv1_clean
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set v = states('sensor.solar_1_sud_ok_power_of_p1') %}
+          {% if trigger.id == 'zero_persistant' %}
+            0
+          {% elif v in ['unavailable', 'unknown', 'none', None] %}
+            {{ this.state | float(0) }}
+          {% elif (v | float(0)) == 0 and (this.state | float(0)) > 20 %}
+            {{ this.state | float(0) }}
+          {% else %}
+            {{ v | float(0) }}
+          {% endif %}
+
+  # ==== APsystems SUD PV2 ====
+  - trigger:
+      - trigger: state
+        entity_id: sensor.solar_1_sud_ok_power_of_p2
+        id: change
+      - trigger: numeric_state
+        entity_id: sensor.solar_1_sud_ok_power_of_p2
+        below: 1
+        for: "00:01:00"
+        id: zero_persistant
+    sensor:
+      - name: "APsystems Sud PV2 Clean"
+        unique_id: apsystems_sud_pv2_clean
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set v = states('sensor.solar_1_sud_ok_power_of_p2') %}
+          {% if trigger.id == 'zero_persistant' %}
+            0
+          {% elif v in ['unavailable', 'unknown', 'none', None] %}
+            {{ this.state | float(0) }}
+          {% elif (v | float(0)) == 0 and (this.state | float(0)) > 20 %}
+            {{ this.state | float(0) }}
+          {% else %}
+            {{ v | float(0) }}
+          {% endif %}

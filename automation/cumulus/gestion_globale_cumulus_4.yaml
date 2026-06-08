@@ -1,0 +1,380 @@
+alias: Gestion Globale Cumulus 4
+description: >-
+  Automation unique : Arrêt HP, Arrêt Anticipé Nuit, Gestion HC (sécurité 36h),
+  Seuil 200L (avec démarrage immédiat si HC active), Reset 07h, Check 21H37,
+  Sécurité Horaire HP, Marche Forcée (reset 2h + enregistrement chauffe si >=2h),
+  Date de chauffe persistante (input_datetime, survit aux reboots HA)
+triggers:
+  - trigger: state
+    entity_id:
+      - binary_sensor.linky_02330101298371_heures_creuses_actives
+    to: "off"
+    id: HP actif
+    alias: HP actif - début heures pleines
+  - trigger: state
+    entity_id:
+      - binary_sensor.linky_02330101298371_heures_creuses_actives
+    to: "on"
+    id: HC actif
+    alias: HC actif - début heures creuses
+  - trigger: time
+    at: "03:37:00"
+    id: Heure Fixe nuit
+    alias: Arrêt anticipé à 03:37 (avant fin HC)
+  - trigger: time
+    at: "07:00:00"
+    id: Reset matin
+    alias: Remise à zéro journalière de cumulus_a_chauffer
+  - trigger: time
+    at: "21:37:00"
+    id: Check 21H37
+    alias: Vérification cumulus à 21:37
+  - trigger: numeric_state
+    entity_id: sensor.meter_1_daily
+    above: 200
+    id: ">200L"
+    alias: Consommation eau > 200L
+  - trigger: state
+    entity_id: light.cumulus
+    to: "on"
+    id: Cumulus allumer
+    alias: Détection allumage cumulus
+  - trigger: state
+    entity_id: input_boolean.cumulus_force
+    to: "on"
+    id: Force ON
+    alias: Activation marche forcée
+  - trigger: state
+    entity_id: input_boolean.cumulus_force
+    to: "on"
+    for: "02:00:00"
+    id: Force 2h
+    alias: Marche forcée active depuis 2h
+  - trigger: state
+    entity_id: input_boolean.cumulus_force
+    to: "off"
+    id: Force OFF
+    alias: Désactivation marche forcée
+  - trigger: state
+    entity_id: input_boolean.cumulus_a_chauffer
+    from: "on"
+    to: "off"
+    id: Chauffe terminée
+    alias: Cumulus a chauffé puis arrêté
+conditions: []
+actions:
+  - alias: Chauffe terminée - Enregistrement date persistante
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Chauffe terminée
+        sequence:
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.cumulus_derniere_chauffe
+            data:
+              timestamp: "{{ now().timestamp() }}"
+
+  - alias: HP actif - Arrêt cumulus
+    choose:
+      - conditions:
+          - condition: trigger
+            id: HP actif
+        sequence:
+          - if:
+              - condition: state
+                entity_id: input_boolean.cumulus_a_chauffer
+                state: "on"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.cumulus_a_chauffer
+          - repeat:
+              count: 5
+              sequence:
+                - action: light.turn_off
+                  target:
+                    entity_id: light.cumulus
+                - delay: "00:01:00"
+          - action: notify.persistent_notification
+            data:
+              title: 🔴 Cumulus arrêté
+              message: Début Heures Pleines - cumulus coupé.
+
+  - alias: Arrêt anticipé 03:37
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Heure Fixe nuit
+        sequence:
+          - if:
+              - condition: state
+                entity_id: input_boolean.cumulus_a_chauffer
+                state: "on"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.cumulus_a_chauffer
+          - repeat:
+              count: 5
+              sequence:
+                - action: light.turn_off
+                  target:
+                    entity_id: light.cumulus
+                - delay: "00:00:30"
+          - action: notify.persistent_notification
+            data:
+              title: 🔴 Cumulus arrêté
+              message: Arrêt anticipé à 03:37 (fin HC imminente).
+
+  - alias: HC actif - Gestion allumage + sécurité 36h
+    choose:
+      - conditions:
+          - condition: trigger
+            id: HC actif
+        sequence:
+          - variables:
+              last_change_ts: >-
+                {{ state_attr('input_datetime.cumulus_derniere_chauffe', 'timestamp') }}
+              diff_seconds: >-
+                {{ now().timestamp() -
+                state_attr('input_datetime.cumulus_derniere_chauffe', 'timestamp') }}
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ states('input_boolean.cumulus_a_chauffer') == 'off' and
+                  diff_seconds > (36 * 60 * 60) }}
+            then:
+              # Sécurité 36h : aucune chauffe depuis trop longtemps
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.cumulus_a_chauffer
+              - action: notify.persistent_notification
+                data:
+                  title: "🔵 Chauffe forcée - Sécurité 36h"
+                  message: >-
+                    Aucune chauffe depuis {{ (diff_seconds / 3600) | round(1) }}
+                    heures. Démarrage forcé du cumulus pour raison sanitaire.
+              - repeat:
+                  count: 5
+                  sequence:
+                    - action: light.turn_on
+                      target:
+                        entity_id: light.cumulus
+                    - delay: "00:01:00"
+            else:
+              - if:
+                  - condition: state
+                    entity_id: input_boolean.cumulus_a_chauffer
+                    state: "on"
+                then:
+                  # Chauffe normale
+                  - action: notify.persistent_notification
+                    data:
+                      title: ℹ️ HC Actives
+                      message: >-
+                        Heures Creuses démarrées. Cumulus en chauffe. Dernière
+                        chauffe : {{ last_change_ts |
+                        timestamp_custom('%d/%m/%Y à %H:%M') }}.
+                  - repeat:
+                      count: 5
+                      sequence:
+                        - action: light.turn_on
+                          target:
+                            entity_id: light.cumulus
+                        - delay: "00:01:00"
+                else:
+                  # Pas de chauffe : consommation < 200L
+                  - action: notify.persistent_notification
+                    data:
+                      title: ℹ️ HC Actives - Pas de chauffe
+                      message: >-
+                        Heures Creuses actives mais consommation < 200L,
+                        cumulus non démarré.
+
+  - alias: Seuil >200L - Activation cumulus_a_chauffer
+    choose:
+      - conditions:
+          - condition: trigger
+            id: ">200L"
+        sequence:
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.cumulus_a_chauffer
+          - if:
+              - condition: state
+                entity_id: binary_sensor.linky_02330101298371_heures_creuses_actives
+                state: "on"
+            then:
+              # HC déjà active -> démarrage immédiat
+              - action: notify.persistent_notification
+                data:
+                  title: ℹ️ Cumulus démarré en HC
+                  message: >-
+                    Consommation > 200L pendant les Heures Creuses -
+                    cumulus démarré immédiatement.
+              - repeat:
+                  count: 5
+                  sequence:
+                    - action: light.turn_on
+                      target:
+                        entity_id: light.cumulus
+                    - delay: "00:01:00"
+            else:
+              # HC pas encore active -> démarrage au prochain HC actif
+              - action: notify.persistent_notification
+                data:
+                  message: >-
+                    Consommation > 200L — cumulus à chauffer activé,
+                    démarrage à la prochaine HC.
+
+  - alias: Reset matin 07:00 - Remise à zéro cumulus_a_chauffer
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Reset matin
+          - condition: state
+            entity_id: input_boolean.cumulus_a_chauffer
+            state: "on"
+        sequence:
+          - action: input_boolean.turn_off
+            target:
+              entity_id: input_boolean.cumulus_a_chauffer
+          - action: notify.persistent_notification
+            data:
+              title: ℹ️ Reset journalier
+              message: Cumulus à chauffer remis à zéro après chauffe.
+
+  - alias: Check 21:37 - Arrêt si cumulus_a_chauffer désactivé
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Check 21H37
+          - condition: state
+            entity_id: input_boolean.cumulus_a_chauffer
+            state: "off"
+        sequence:
+          - repeat:
+              count: 5
+              sequence:
+                - action: light.turn_off
+                  target:
+                    entity_id: light.cumulus
+                - delay: "00:01:00"
+          - action: notify.persistent_notification
+            data:
+              title: 🔴 Cumulus arrêté à 21:37
+              message: "'Cumulus à chauffer' désactivé - cumulus coupé avant entrée HC."
+
+  - alias: Sécurité HP - Extinction allumage intempestif
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Cumulus allumer
+          - condition: time
+            after: "06:37:00"
+            before: "21:35:00"
+          - condition: state
+            entity_id: binary_sensor.linky_02330101298371_heures_creuses_actives
+            state: "off"
+          - condition: state
+            entity_id: input_boolean.cumulus_force
+            state: "off"
+        sequence:
+          - repeat:
+              count: 5
+              sequence:
+                - action: light.turn_off
+                  target:
+                    entity_id: light.cumulus
+                - delay: "00:00:30"
+          - action: notify.persistent_notification
+            data:
+              title: ⚠️ Sécurité HP déclenchée
+              message: >-
+                Cumulus éteint - allumage intempestif détecté en HP (marche
+                forcée inactive).
+
+  - alias: Force ON - Démarrage immédiat
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Force ON
+        sequence:
+          - repeat:
+              count: 5
+              sequence:
+                - action: light.turn_on
+                  target:
+                    entity_id: light.cumulus
+                - delay: "00:01:00"
+          - action: notify.persistent_notification
+            data:
+              title: 🔵 Cumulus en marche forcée
+              message: Cumulus démarré manuellement (marche forcée activée).
+
+  - alias: Force 2h - Reset cumulus_a_chauffer + enregistrement chauffe
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Force 2h
+        sequence:
+          - if:
+              - condition: state
+                entity_id: input_boolean.cumulus_a_chauffer
+                state: "on"
+            then:
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.cumulus_a_chauffer
+          # Marche forcée >= 2h = chauffe suffisante -> on enregistre la date
+          - action: input_datetime.set_datetime
+            target:
+              entity_id: input_datetime.cumulus_derniere_chauffe
+            data:
+              timestamp: "{{ now().timestamp() }}"
+          - action: notify.persistent_notification
+            data:
+              title: ℹ️ Marche forcée 2h
+              message: >-
+                Marche forcée 2h — chauffe enregistrée, compteur 'sans chauffe'
+                remis à zéro.
+
+  - alias: Force OFF - Arrêt ou maintien selon contexte
+    choose:
+      - conditions:
+          - condition: trigger
+            id: Force OFF
+        sequence:
+          - if:
+              - condition: state
+                entity_id: binary_sensor.linky_02330101298371_heures_creuses_actives
+                state: "on"
+              - condition: state
+                entity_id: input_boolean.cumulus_a_chauffer
+                state: "on"
+            then:
+              # HC active + cumulus_a_chauffer ON -> maintien de la chauffe
+              - action: notify.persistent_notification
+                data:
+                  title: ℹ️ Marche forcée désactivée
+                  message: >-
+                    Marche forcée coupée - cumulus maintenu en chauffe
+                    (HC active + consommation > 200L).
+            else:
+              # Hors HC ou cumulus_a_chauffer OFF -> extinction.
+              # PAS d'enregistrement de chauffe : une marche forcée < 2h ne compte pas.
+              - repeat:
+                  count: 5
+                  sequence:
+                    - action: light.turn_off
+                      target:
+                        entity_id: light.cumulus
+                    - delay: "00:00:30"
+              - action: notify.persistent_notification
+                data:
+                  title: 🔴 Marche forcée désactivée
+                  message: Cumulus éteint - marche forcée coupée.
+
+mode: queued
+max: 3

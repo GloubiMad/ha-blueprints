@@ -1,0 +1,37 @@
+# Surplus solaire net, demasque le buffer batterie des 2 Zendure.
+#
+# Les Zendure regulent le reseau a 0 en chargeant/dechargeant leurs batteries.
+# Donc la puissance batterie EST le signal de surplus/deficit :
+#   bat_in_out : + = decharge (deficit)  |  - = charge (surplus stocke)
+# Shelly phase_c : import = +  |  injection = -
+#
+# Surplus = -bat_in_out(glagla) - bat_in_out(up) - reseau
+#   batteries chargent           -> surplus positif
+#   batteries pleines + injection -> -reseau = surplus (injection gaspillee)
+#   batteries dechargent          -> surplus negatif (on puise)
+#
+# Formule validee en live : (-(-61) -(-138) -10) = +189W (coherent).
+template:
+  - sensor:
+      - name: "Surplus Solaire Brut"
+        unique_id: surplus_solaire_brut
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        state: >-
+          {% set g_bat = states('sensor.hyper_2000_glagla_bat_in_out') | float(0) %}
+          {% set u_bat = states('sensor.hyper_2000_up_bat_in_out') | float(0) %}
+          {% set grid  = states('sensor.shellypro3em_9454c5b8aaf0_phase_c_active_power') | float(0) %}
+          {{ (-g_bat - u_bat - grid) | round(0) }}
+
+# Surplus lisse (moyenne glissante) : le brut swing de -70 a +2400 selon les nuages
+# + le lag 5-10s de la regulation Zendure. Fenetre 10 min pour un signal decisionnel.
+# C'est ce capteur qu'on donne a Solar Optimizer / EMHASS, jamais le brut.
+sensor:
+  - platform: filter
+    name: "Surplus Solaire Lisse"
+    unique_id: surplus_solaire_lisse
+    entity_id: sensor.surplus_solaire_brut
+    filters:
+      - filter: time_simple_moving_average
+        window_size: "00:10:00"
