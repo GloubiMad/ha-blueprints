@@ -275,6 +275,9 @@ actions:
             state: "on"
           - condition: template
             value_template: "{{ (now() - states[light_entity].last_changed).total_seconds() > 30 }}"
+          # Respect du contrôle manuel : on n'éteint que si la lumière n'a pas été allumée à la main (UI)
+          - condition: template
+            value_template: "{{ states[light_entity].context.user_id is none }}"
         sequence:
           - action: light.turn_off
             target:
@@ -293,6 +296,9 @@ actions:
           - condition: state
             entity_id: !input light_entity
             state: "on"
+          # Respect du contrôle manuel : on n'éteint pas une lumière allumée à la main (UI)
+          - condition: template
+            value_template: "{{ states[light_entity].context.user_id is none }}"
         sequence:
           - action: light.turn_off
             target:
@@ -304,6 +310,9 @@ actions:
       - conditions:
           - condition: trigger
             id: depart
+          # Anti reboot HA : vrai départ (home -> not_home), pas une init unknown -> not_home
+          - condition: template
+            value_template: "{{ trigger.from_state is not none and trigger.from_state.state == 'home' }}"
           - condition: template
             value_template: "{{ states(proxy_count_sensor) | int(0) >= min_active_proxies }}"
           - condition: template
@@ -346,5 +355,59 @@ actions:
                     *🏠 Maison vide*
 
                     Plus aucun badge personne \(K\) présent\.
+
+                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}
+
+  # ── 5. Maison ré-occupée : le PREMIER K rentre dans une maison vide ──
+  - alias: Maison ré-occupée
+    choose:
+      - conditions:
+          - condition: trigger
+            id: arrivee
+          # uniquement une personne (K), pas un véhicule
+          - condition: template
+            value_template: "{{ trigger.entity_id in person_trackers }}"
+          # proxies en ligne (pas un reboot)
+          - condition: template
+            value_template: "{{ states(proxy_count_sensor) | int(0) >= min_active_proxies }}"
+          # vraie arrivée (absent assez longtemps), pas un flicker de reboot
+          - condition: template
+            value_template: >
+              {{ trigger.from_state is not none
+                 and trigger.from_state.state != 'home'
+                 and (now() - trigger.from_state.last_changed).total_seconds() > away_min_seconds }}
+          # la maison était vide : ce K est le seul présent maintenant
+          - condition: template
+            value_template: >
+              {% set ns = namespace(home=0) %}
+              {% for e in person_trackers %}
+                {% if is_state(e, 'home') %}{% set ns.home = ns.home + 1 %}{% endif %}
+              {% endfor %}
+              {{ ns.home == 1 }}
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ notify_targets | count > 0 }}"
+            then:
+              - action: notify.send_message
+                target:
+                  entity_id: !input notify_targets
+                data:
+                  title: 🏠 Maison ré-occupée
+                  message: >-
+                    Quelqu'un est rentré.
+                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
+          - if:
+              - condition: template
+                value_template: "{{ telegram_config_entry | length > 0 }}"
+            then:
+              - action: telegram_bot.send_message
+                data:
+                  config_entry_id: !input telegram_config_entry
+                  parse_mode: markdownv2
+                  message: >-
+                    *🏠 Maison ré-occupée*
+
+                    Quelqu'un est rentré\.
 
                     Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}
