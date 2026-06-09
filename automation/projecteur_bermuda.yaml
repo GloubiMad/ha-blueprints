@@ -72,10 +72,33 @@ blueprint:
           unit_of_measurement: s
           mode: box
     light_entity:
-      name: Lumière à piloter
+      name: Lumière à piloter (entité suivie pour l'état on/off)
       selector:
         entity:
           domain: light
+    on_actions:
+      name: Scripts à exécuter à l'arrivée (optionnel)
+      description: >
+        Optionnel. Si renseigné, ces scripts sont exécutés à l'arrivée À LA PLACE
+        d'allumer "Lumière à piloter" (utile pour plusieurs lumières, une couleur,
+        une scène…). NB : "Lumière à piloter" doit quand même refléter l'état on/off
+        de l'ensemble (mets une lumière représentative ou un groupe que tes scripts
+        pilotent). Vide = simple allumage de la lumière.
+      default: []
+      selector:
+        entity:
+          domain: script
+          multiple: true
+    off_actions:
+      name: Scripts à exécuter à l'extinction (optionnel)
+      description: >
+        Optionnel. Idem à l'extinction (entrée maison, timeout, lever du soleil).
+        Vide = simple extinction de la lumière.
+      default: []
+      selector:
+        entity:
+          domain: script
+          multiple: true
     driveway_area:
       name: Pièce "allée" (proxy extérieur)
       description: >
@@ -160,6 +183,8 @@ variables:
   driveway_area_name: "{{ area_name(driveway_area_id) }}"
   away_min_seconds: !input away_min_seconds
   light_entity: !input light_entity
+  on_actions: !input on_actions
+  off_actions: !input off_actions
   notify_targets: !input notify_targets
   telegram_config_entry: !input telegram_config_entry
 
@@ -241,9 +266,17 @@ actions:
                 true
               {% endif %}
         sequence:
-          - action: light.turn_on
-            target:
-              entity_id: !input light_entity
+          - if:
+              - condition: template
+                value_template: "{{ on_actions | count > 0 }}"
+            then:
+              - action: script.turn_on
+                target:
+                  entity_id: !input on_actions
+            else:
+              - action: light.turn_on
+                target:
+                  entity_id: !input light_entity
 
   # ── 2. Extinction : un K qui vient d'arriver (matching nom exact + repli) entre dans la maison ──
   - alias: Extinction entrée maison
@@ -279,9 +312,17 @@ actions:
           - condition: template
             value_template: "{{ states[light_entity].context.user_id is none }}"
         sequence:
-          - action: light.turn_off
-            target:
-              entity_id: !input light_entity
+          - if:
+              - condition: template
+                value_template: "{{ off_actions | count > 0 }}"
+            then:
+              - action: script.turn_on
+                target:
+                  entity_id: !input off_actions
+            else:
+              - action: light.turn_off
+                target:
+                  entity_id: !input light_entity
 
   # ── 3. Filet de sécurité ──
   - alias: Filet de sécurité
@@ -300,9 +341,17 @@ actions:
           - condition: template
             value_template: "{{ states[light_entity].context.user_id is none }}"
         sequence:
-          - action: light.turn_off
-            target:
-              entity_id: !input light_entity
+          - if:
+              - condition: template
+                value_template: "{{ off_actions | count > 0 }}"
+            then:
+              - action: script.turn_on
+                target:
+                  entity_id: !input off_actions
+            else:
+              - action: light.turn_off
+                target:
+                  entity_id: !input light_entity
 
   # ── 4. Maison vide : plus aucun K présent (dédupliqué : dernier parti) ──
   - alias: Maison vide

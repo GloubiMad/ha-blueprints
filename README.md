@@ -15,6 +15,7 @@ Pilote une lumière extérieure à partir de trackers BLE [Bermuda](https://gith
 - **Notification « maison ré-occupée »** quand le premier badge K rentre dans une maison vide.
 - **Notification(s) « maison vide »** vers une ou plusieurs entités `notify` (sélectionnables dans une liste) quand plus aucun badge K n'est présent.
 - **Anti faux-positifs reboot WiFi** via le compteur de proxies Bermuda (`sensor.bermuda_global_active_proxy_count`).
+- **Action générique (optionnel)** : exécuter des scripts à l'arrivée / l'extinction au lieu d'allumer la lumière → permet plusieurs lumières, une scène, une couleur, etc.
 
 Convention de badges : noms se terminant par **K** = personnes, par **C** = véhicules. Les véhicules ne comptent pas pour « maison vide ».
 
