@@ -142,6 +142,35 @@ blueprint:
       default: ""
       selector:
         text: {}
+    msg_maison_vide:
+      name: Message "maison vide"
+      description: >
+        Envoyé quand le dernier badge K part. Templates Jinja autorisés, ex.
+        {{ trigger_name }} (le badge concerné) ou {{ now().strftime('%H:%M') }}.
+      default: "🏠 Maison vide — dernier parti : {{ trigger_name }}. ({{ now().strftime('%H:%M') }})"
+      selector:
+        text:
+          multiline: true
+    msg_maison_reoccupee:
+      name: Message "maison ré-occupée"
+      description: >
+        Envoyé quand le premier badge K rentre. {{ trigger_name }} = le badge concerné.
+      default: "🏠 Maison ré-occupée — {{ trigger_name }} est rentré. ({{ now().strftime('%H:%M') }})"
+      selector:
+        text:
+          multiline: true
+    telegram_parse_mode:
+      name: Format des messages Telegram
+      description: >
+        markdown (souple : *gras* _italique_), markdownv2 (riche mais échappement
+        strict des caractères spéciaux _ * [ ] ( ) . - ! etc.), ou html.
+      default: markdown
+      selector:
+        select:
+          options:
+            - markdown
+            - markdownv2
+            - html
     sun_entity:
       name: Entité soleil
       default: sun.sun
@@ -187,6 +216,7 @@ variables:
   off_actions: !input off_actions
   notify_targets: !input notify_targets
   telegram_config_entry: !input telegram_config_entry
+  trigger_name: "{{ (state_attr(trigger.entity_id, 'friendly_name') or trigger.entity_id) if trigger.entity_id is defined else '' }}"
 
 triggers:
   - trigger: state
@@ -378,7 +408,7 @@ actions:
               {% endfor %}
               {{ ns.home == 0 and ns.maxent == trigger.entity_id }}
         sequence:
-          # Notification générique (texte simple) vers les entités notify choisies
+          # Notification vers les entités notify choisies
           - if:
               - condition: template
                 value_template: "{{ notify_targets | count > 0 }}"
@@ -387,11 +417,9 @@ actions:
                 target:
                   entity_id: !input notify_targets
                 data:
-                  title: 🏠 Maison vide
-                  message: >-
-                    Plus aucun badge personne (K) présent.
-                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
-          # Telegram en MarkdownV2 (si un config_entry_id est renseigné)
+                  title: Maison vide
+                  message: !input msg_maison_vide
+          # Telegram (si un config_entry_id est renseigné)
           - if:
               - condition: template
                 value_template: "{{ telegram_config_entry | length > 0 }}"
@@ -399,13 +427,8 @@ actions:
               - action: telegram_bot.send_message
                 data:
                   config_entry_id: !input telegram_config_entry
-                  parse_mode: markdownv2
-                  message: >-
-                    *🏠 Maison vide*
-
-                    Plus aucun badge personne \(K\) présent\.
-
-                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}
+                  parse_mode: !input telegram_parse_mode
+                  message: !input msg_maison_vide
 
   # ── 5. Maison ré-occupée : le PREMIER K rentre dans une maison vide ──
   - alias: Maison ré-occupée
@@ -442,10 +465,8 @@ actions:
                 target:
                   entity_id: !input notify_targets
                 data:
-                  title: 🏠 Maison ré-occupée
-                  message: >-
-                    Quelqu'un est rentré.
-                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}.
+                  title: Maison ré-occupée
+                  message: !input msg_maison_reoccupee
           - if:
               - condition: template
                 value_template: "{{ telegram_config_entry | length > 0 }}"
@@ -453,10 +474,5 @@ actions:
               - action: telegram_bot.send_message
                 data:
                   config_entry_id: !input telegram_config_entry
-                  parse_mode: markdownv2
-                  message: >-
-                    *🏠 Maison ré-occupée*
-
-                    Quelqu'un est rentré\.
-
-                    Heure : {{ now().strftime('%d/%m/%Y %H:%M') }}
+                  parse_mode: !input telegram_parse_mode
+                  message: !input msg_maison_reoccupee

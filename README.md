@@ -13,7 +13,7 @@ Pilote une lumière extérieure à partir de trackers BLE [Bermuda](https://gith
 - **Filet de sécurité** : extinction après un timeout ou au lever du soleil.
 - **Respect du contrôle manuel** : n'éteint pas une lumière allumée à la main (UI).
 - **Notification « maison ré-occupée »** quand le premier badge K rentre dans une maison vide.
-- **Notification(s) « maison vide »** vers une ou plusieurs entités `notify` (sélectionnables dans une liste) quand plus aucun badge K n'est présent.
+- **Notification(s) « maison vide »** vers une ou plusieurs entités `notify` (sélectionnables) quand plus aucun badge K n'est présent. **Messages personnalisables** (départ/arrivée) avec `{{ trigger_name }}` pour insérer le nom du badge ; **format Telegram au choix** (markdown / markdownv2 / html).
 - **Anti faux-positifs reboot WiFi** via le compteur de proxies Bermuda (`sensor.bermuda_global_active_proxy_count`).
 - **Action générique (optionnel)** : exécuter des scripts à l'arrivée / l'extinction au lieu d'allumer la lumière → permet plusieurs lumières, une scène, une couleur, etc.
 
