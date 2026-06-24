@@ -142,6 +142,21 @@ blueprint:
       default: ""
       selector:
         text: {}
+    notif_maison_vide_active:
+      name: Activer la notification "maison vide"
+      description: >
+        Si désactivé, aucune notification de départ n'est envoyée (la logique
+        d'allumage/extinction de la lumière continue de fonctionner).
+      default: true
+      selector:
+        boolean: {}
+    notif_maison_reoccupee_active:
+      name: Activer la notification "maison ré-occupée"
+      description: >
+        Si désactivé, aucune notification d'arrivée n'est envoyée.
+      default: true
+      selector:
+        boolean: {}
     msg_maison_vide:
       name: Message "maison vide"
       description: >
@@ -219,6 +234,8 @@ variables:
   off_actions: !input off_actions
   notify_targets: !input notify_targets
   telegram_config_entry: !input telegram_config_entry
+  notif_maison_vide_active: !input notif_maison_vide_active
+  notif_maison_reoccupee_active: !input notif_maison_reoccupee_active
   trigger_name: "{{ (state_attr(trigger.entity_id, 'friendly_name') or trigger.entity_id) if trigger.entity_id is defined else '' }}"
 
 triggers:
@@ -392,6 +409,8 @@ actions:
       - conditions:
           - condition: trigger
             id: depart
+          - condition: template
+            value_template: "{{ notif_maison_vide_active }}"
           # Anti reboot HA : vrai départ (home -> not_home), pas une init unknown -> not_home
           - condition: template
             value_template: "{{ trigger.from_state is not none and trigger.from_state.state == 'home' }}"
@@ -420,7 +439,6 @@ actions:
                 target:
                   entity_id: !input notify_targets
                 data:
-                  title: Maison vide
                   message: !input msg_maison_vide
           # Telegram (si un config_entry_id est renseigné)
           - if:
@@ -439,6 +457,8 @@ actions:
       - conditions:
           - condition: trigger
             id: arrivee
+          - condition: template
+            value_template: "{{ notif_maison_reoccupee_active }}"
           # uniquement une personne (K), pas un véhicule
           - condition: template
             value_template: "{{ trigger.entity_id in person_trackers }}"
@@ -468,7 +488,6 @@ actions:
                 target:
                   entity_id: !input notify_targets
                 data:
-                  title: Maison ré-occupée
                   message: !input msg_maison_reoccupee
           - if:
               - condition: template

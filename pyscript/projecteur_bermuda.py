@@ -52,6 +52,8 @@ LIGHT_TIMEOUT = 600          # s : extinction de sécurité
 NOTIFY_TARGETS = []          # entités notify, ex ["notify.mobile_app_xxx"] ; [] = aucune
 TELEGRAM_CONFIG = ""         # config_entry_id Telegram ; "" = désactivé
 TELEGRAM_PARSE_MODE = "markdown"   # markdown | markdownv2 | html
+NOTIF_MAISON_VIDE_ACTIVE = True       # False = aucune notif de départ
+NOTIF_MAISON_REOCCUPEE_ACTIVE = True  # False = aucune notif d'arrivée
 
 # Messages à personnaliser. ⚠️ Évite "maison vide" en clair (interception / écran verrouillé).
 # Placeholders : {nom} = badge concerné, {heure} = heure.
@@ -250,10 +252,11 @@ def _maison_vide(var_name=None, old_value=None, **kwargs):
         return
     if _persons_home():            # encore quelqu'un
         return
-    if _empty:                     # déjà notifié
+    if _empty:                     # déjà passé à vide
         return
-    _empty = True
-    _notify(MSG_MAISON_VIDE.format(nom=_friendly(var_name), heure=_now_str()))
+    _empty = True                  # on tient l'état à jour même si la notif est coupée
+    if NOTIF_MAISON_VIDE_ACTIVE:
+        _notify(MSG_MAISON_VIDE.format(nom=_friendly(var_name), heure=_now_str()))
 
 @state_trigger(*[e + " == 'home'" for e in PERSONS])
 def _maison_reoccupee(var_name=None, **kwargs):
@@ -266,5 +269,6 @@ def _maison_reoccupee(var_name=None, **kwargs):
         return
     if len(_persons_home()) != 1:  # ce K est bien le seul présent
         return
-    _empty = False
-    _notify(MSG_MAISON_REOCCUPEE.format(nom=_friendly(var_name), heure=_now_str()))
+    _empty = False                 # on tient l'état à jour même si la notif est coupée
+    if NOTIF_MAISON_REOCCUPEE_ACTIVE:
+        _notify(MSG_MAISON_REOCCUPEE.format(nom=_friendly(var_name), heure=_now_str()))
