@@ -49,8 +49,14 @@ DEPART_HOLD = 180            # s : confirmation départ
 LIGHT_TIMEOUT = 600          # s : extinction de sécurité
 
 # Notifications
-NOTIFY_TARGETS = []          # entités notify (texte simple), ex ["notify.mobile_app_xxx"] ; [] = aucune
-TELEGRAM_CONFIG = ""         # config_entry_id Telegram (MarkdownV2) ; "" = désactivé
+NOTIFY_TARGETS = []          # entités notify, ex ["notify.mobile_app_xxx"] ; [] = aucune
+TELEGRAM_CONFIG = ""         # config_entry_id Telegram ; "" = désactivé
+TELEGRAM_PARSE_MODE = "markdown"   # markdown | markdownv2 | html
+
+# Messages à personnaliser. ⚠️ Évite "maison vide" en clair (interception / écran verrouillé).
+# Placeholders : {nom} = badge concerné, {heure} = heure.
+MSG_MAISON_VIDE = "🔒 Statut 0 ({heure})"
+MSG_MAISON_REOCCUPEE = "🔓 Statut 1 — {nom} ({heure})"
 
 ABSENT = ("not_home", "unknown", "unavailable", "None")
 
@@ -132,15 +138,20 @@ def _now_str():
 def _persons_home():
     return [p for p in PERSONS if _val(p) == "home"]
 
-def _notify(title, message_plain, message_md):
-    msg = message_plain + " Heure : " + _now_str() + "."
+def _friendly(entity):
+    try:
+        return (state.getattr(entity) or {}).get("friendly_name") or entity
+    except Exception:
+        return entity
+
+def _notify(message):
     if NOTIFY_TARGETS:
         service.call("notify", "send_message",
-                     entity_id=NOTIFY_TARGETS, title=title, message=msg)
+                     entity_id=NOTIFY_TARGETS, message=message)
     if TELEGRAM_CONFIG:
         service.call("telegram_bot", "send_message",
-                     config_entry_id=TELEGRAM_CONFIG, parse_mode="markdownv2",
-                     message=message_md + "\n\nHeure : " + _now_str())
+                     config_entry_id=TELEGRAM_CONFIG,
+                     parse_mode=TELEGRAM_PARSE_MODE, message=message)
 
 # ─────────────────────────── INITIALISATION ───────────────────────────
 
@@ -242,9 +253,7 @@ def _maison_vide(var_name=None, old_value=None, **kwargs):
     if _empty:                     # déjà notifié
         return
     _empty = True
-    _notify("🏠 Maison vide",
-            "Plus aucun badge personne (K) présent.",
-            "*🏠 Maison vide*\n\nPlus aucun badge personne \\(K\\) présent\\.")
+    _notify(MSG_MAISON_VIDE.format(nom=_friendly(var_name), heure=_now_str()))
 
 @state_trigger(*[e + " == 'home'" for e in PERSONS])
 def _maison_reoccupee(var_name=None, **kwargs):
@@ -258,6 +267,4 @@ def _maison_reoccupee(var_name=None, **kwargs):
     if len(_persons_home()) != 1:  # ce K est bien le seul présent
         return
     _empty = False
-    _notify("🏠 Maison ré-occupée",
-            "Quelqu'un est rentré.",
-            "*🏠 Maison ré-occupée*\n\nQuelqu'un est rentré\\.")
+    _notify(MSG_MAISON_REOCCUPEE.format(nom=_friendly(var_name), heure=_now_str()))
