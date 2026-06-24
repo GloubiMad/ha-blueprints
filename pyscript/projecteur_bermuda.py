@@ -56,8 +56,10 @@ NOTIF_MAISON_VIDE_ACTIVE = True       # False = aucune notif de départ
 NOTIF_MAISON_REOCCUPEE_ACTIVE = True  # False = aucune notif d'arrivée
 
 # Messages à personnaliser. ⚠️ Évite "maison vide" en clair (interception / écran verrouillé).
-# Placeholders : {nom} = badge concerné, {heure} = heure.
+# Placeholders : {nom} = badge concerné, {heure} = heure. Titre "" = aucun titre.
+TITRE_MAISON_VIDE = "🔒 Statut 0"
 MSG_MAISON_VIDE = "🔒 Statut 0 ({heure})"
+TITRE_MAISON_REOCCUPEE = "🔓 Statut 1"
 MSG_MAISON_REOCCUPEE = "🔓 Statut 1 — {nom} ({heure})"
 
 ABSENT = ("not_home", "unknown", "unavailable", "None")
@@ -146,14 +148,18 @@ def _friendly(entity):
     except Exception:
         return entity
 
-def _notify(message):
+def _notify(message, title=""):
     if NOTIFY_TARGETS:
-        service.call("notify", "send_message",
-                     entity_id=NOTIFY_TARGETS, message=message)
+        kw = {"entity_id": NOTIFY_TARGETS, "message": message}
+        if title:
+            kw["title"] = title
+        service.call("notify", "send_message", **kw)
     if TELEGRAM_CONFIG:
-        service.call("telegram_bot", "send_message",
-                     config_entry_id=TELEGRAM_CONFIG,
-                     parse_mode=TELEGRAM_PARSE_MODE, message=message)
+        kw = {"config_entry_id": TELEGRAM_CONFIG,
+              "parse_mode": TELEGRAM_PARSE_MODE, "message": message}
+        if title:
+            kw["title"] = title
+        service.call("telegram_bot", "send_message", **kw)
 
 # ─────────────────────────── INITIALISATION ───────────────────────────
 
@@ -256,7 +262,8 @@ def _maison_vide(var_name=None, old_value=None, **kwargs):
         return
     _empty = True                  # on tient l'état à jour même si la notif est coupée
     if NOTIF_MAISON_VIDE_ACTIVE:
-        _notify(MSG_MAISON_VIDE.format(nom=_friendly(var_name), heure=_now_str()))
+        _notify(MSG_MAISON_VIDE.format(nom=_friendly(var_name), heure=_now_str()),
+                title=TITRE_MAISON_VIDE)
 
 @state_trigger(*[e + " == 'home'" for e in PERSONS])
 def _maison_reoccupee(var_name=None, **kwargs):
@@ -271,4 +278,5 @@ def _maison_reoccupee(var_name=None, **kwargs):
         return
     _empty = False                 # on tient l'état à jour même si la notif est coupée
     if NOTIF_MAISON_REOCCUPEE_ACTIVE:
-        _notify(MSG_MAISON_REOCCUPEE.format(nom=_friendly(var_name), heure=_now_str()))
+        _notify(MSG_MAISON_REOCCUPEE.format(nom=_friendly(var_name), heure=_now_str()),
+                title=TITRE_MAISON_REOCCUPEE)

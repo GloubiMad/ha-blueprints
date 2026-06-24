@@ -157,6 +157,21 @@ blueprint:
       default: true
       selector:
         boolean: {}
+    titre_maison_vide:
+      name: Titre de la notification "maison vide"
+      description: >
+        Titre (1re ligne / en-tête de la notif). ⚠️ Évite « maison vide » en clair.
+        Laisse vide pour aucun titre. Templates Jinja OK.
+      default: "🔒 Statut 0"
+      selector:
+        text: {}
+    titre_maison_reoccupee:
+      name: Titre de la notification "maison ré-occupée"
+      description: >
+        Titre de la notif d'arrivée. Vide = aucun titre. Templates Jinja OK.
+      default: "🔓 Statut 1"
+      selector:
+        text: {}
     msg_maison_vide:
       name: Message "maison vide"
       description: >
@@ -439,6 +454,7 @@ actions:
                 target:
                   entity_id: !input notify_targets
                 data:
+                  title: !input titre_maison_vide
                   message: !input msg_maison_vide
           # Telegram (si un config_entry_id est renseigné)
           - if:
@@ -449,6 +465,7 @@ actions:
                 data:
                   config_entry_id: !input telegram_config_entry
                   parse_mode: !input telegram_parse_mode
+                  title: !input titre_maison_vide
                   message: !input msg_maison_vide
 
   # ── 5. Maison ré-occupée : le PREMIER K rentre dans une maison vide ──
@@ -488,6 +505,7 @@ actions:
                 target:
                   entity_id: !input notify_targets
                 data:
+                  title: !input titre_maison_reoccupee
                   message: !input msg_maison_reoccupee
           - if:
               - condition: template
@@ -497,4 +515,5 @@ actions:
                 data:
                   config_entry_id: !input telegram_config_entry
                   parse_mode: !input telegram_parse_mode
+                  title: !input titre_maison_reoccupee
                   message: !input msg_maison_reoccupee
