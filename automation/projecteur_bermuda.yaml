@@ -145,17 +145,20 @@ blueprint:
     msg_maison_vide:
       name: Message "maison vide"
       description: >
-        Envoyé quand le dernier badge K part. Templates Jinja autorisés, ex.
-        {{ trigger_name }} (le badge concerné) ou {{ now().strftime('%H:%M') }}.
-      default: "🏠 Maison vide — dernier parti : {{ trigger_name }}. ({{ now().strftime('%H:%M') }})"
+        Envoyé quand le dernier badge K part. ⚠️ Par sécurité, évite d'écrire
+        « maison vide » en clair (lisible en cas d'interception ou d'aperçu sur
+        écran verrouillé) — mets un libellé à toi / codé. Templates Jinja OK, ex.
+        {{ trigger_name }} (badge concerné) ou {{ now().strftime('%H:%M') }}.
+      default: "🔒 Statut 0 — {{ trigger_name }} ({{ now().strftime('%H:%M') }})"
       selector:
         text:
           multiline: true
     msg_maison_reoccupee:
       name: Message "maison ré-occupée"
       description: >
-        Envoyé quand le premier badge K rentre. {{ trigger_name }} = le badge concerné.
-      default: "🏠 Maison ré-occupée — {{ trigger_name }} est rentré. ({{ now().strftime('%H:%M') }})"
+        Envoyé quand le premier badge K rentre. Mets le libellé que tu veux.
+        {{ trigger_name }} = badge concerné, {{ now().strftime('%H:%M') }} = heure.
+      default: "🔓 Statut 1 — {{ trigger_name }} ({{ now().strftime('%H:%M') }})"
       selector:
         text:
           multiline: true
