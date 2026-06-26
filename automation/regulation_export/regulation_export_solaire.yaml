@@ -1,0 +1,320 @@
+blueprint:
+  name: "Régulation export réseau solaire"
+  description: >
+    Détecte l'export d'énergie vers le réseau (valeur négative sur le capteur
+    réseau) et régule dans cet ordre :
+
+    **Régulation (export détecté) :**
+    1. Select no-export Zendure A et/ou B → option "interdit" (si activé)
+    2. APsystems EZ1 mis à 0 W
+
+    **Restauration :**
+    - Retour en consommation (réseau > seuil de retour pendant X s)
+    - OU batterie sous le seuil SoC configuré (batteries déchargées → relancer la prod)
+
+    Les booléens Zendure A / B permettent de désactiver indépendamment
+    le contrôle de chaque Hyper.
+  domain: automation
+  author: GloubiMad
+  input:
+
+    # ════════════════════════════════════════
+    # RÉSEAU
+    # ════════════════════════════════════════
+    grid_power_sensor:
+      name: "Capteur puissance réseau (W)"
+      description: "Négatif = export vers le réseau, positif = import."
+      selector:
+        entity:
+          domain: sensor
+          device_class: power
+
+    export_threshold:
+      name: "Seuil d'export déclenchant la régulation (W)"
+      description: "Ex : 1000 → régulation si export > 1000 W pendant la durée configurée."
+      default: 1000
+      selector:
+        number:
+          min: 100
+          max: 5000
+          step: 50
+          unit_of_measurement: "W"
+          mode: slider
+
+    export_duration:
+      name: "Durée de confirmation avant régulation (s)"
+      default: 45
+      selector:
+        number:
+          min: 5
+          max: 300
+          step: 5
+          unit_of_measurement: "s"
+          mode: slider
+
+    restore_hysteresis:
+      name: "Seuil de retour en consommation (W)"
+      description: "Restauration quand réseau > cette valeur en import. Ex : 50 W."
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 500
+          step: 10
+          unit_of_measurement: "W"
+          mode: slider
+
+    restore_duration:
+      name: "Durée de confirmation avant restauration (s)"
+      default: 20
+      selector:
+        number:
+          min: 5
+          max: 120
+          step: 5
+          unit_of_measurement: "s"
+          mode: slider
+
+    # ════════════════════════════════════════
+    # ZENDURE A
+    # ════════════════════════════════════════
+    enable_zendure_a:
+      name: "Contrôler le Zendure A"
+      description: "Si désactivé, le Zendure A n'est pas touché."
+      default: true
+      selector:
+        boolean:
+
+    zendure_select_a:
+      name: "Select grid_reverse Zendure A"
+      description: >
+        Entité select contrôlant l'export du Hyper A.
+        Ex : select.hyper_2000_glagla_grid_reverse
+        Ignorée si 'Contrôler le Zendure A' est désactivé.
+      selector:
+        entity:
+          domain: select
+
+    zendure_block_option:
+      name: "Option 'export interdit' sur le select Zendure"
+      description: "Valeur à sélectionner pour interdire l'export (ex: interdit)."
+      default: "interdit"
+      selector:
+        text:
+
+    zendure_restore_option:
+      name: "Option 'export autorisé/désactivé' sur le select Zendure"
+      description: >
+        Valeur à sélectionner lors de la restauration.
+        Choisir entre 'desactive' (no-export désactivé) ou 'autorise' (export explicitement autorisé).
+      default: "autorise"
+      selector:
+        select:
+          options:
+            - "desactive"
+            - "autorise"
+
+    # ════════════════════════════════════════
+    # ZENDURE B
+    # ════════════════════════════════════════
+    enable_zendure_b:
+      name: "Contrôler le Zendure B"
+      description: "Si désactivé, le Zendure B n'est pas touché."
+      default: true
+      selector:
+        boolean:
+
+    zendure_select_b:
+      name: "Select grid_reverse Zendure B"
+      description: >
+        Entité select contrôlant l'export du Hyper B.
+        Ignorée si 'Contrôler le Zendure B' est désactivé.
+      selector:
+        entity:
+          domain: select
+
+    # ════════════════════════════════════════
+    # APSYSTEMS
+    # ════════════════════════════════════════
+    apsystem_1_power:
+      name: "APsystems EZ1 n°1 — entité puissance max"
+      description: "Entité 'number' limitant la puissance de sortie (0–980 W)."
+      selector:
+        entity:
+          domain: number
+
+    apsystem_2_power:
+      name: "APsystems EZ1 n°2 — entité puissance max"
+      description: "Entité 'number' limitant la puissance de sortie (0–980 W). Peut être identique au n°1 si partagée."
+      selector:
+        entity:
+          domain: number
+
+    apsystem_max_power:
+      name: "Puissance max à restaurer sur les APsystems (W)"
+      default: 980
+      selector:
+        number:
+          min: 0
+          max: 980
+          step: 10
+          unit_of_measurement: "W"
+          mode: slider
+
+    # ════════════════════════════════════════
+    # BATTERIE
+    # ════════════════════════════════════════
+    battery_soc_sensor:
+      name: "Capteur SoC batterie (%)"
+      description: >
+        Si le SoC descend sous le seuil pendant une régulation,
+        les APsystems sont relancés à fond pour couvrir la demande.
+      selector:
+        entity:
+          domain: sensor
+          device_class: battery
+
+    battery_low_threshold:
+      name: "Seuil SoC 'batterie en décharge' (%)"
+      description: "En dessous → APsystems remis à max même si export encore présent."
+      default: 95
+      selector:
+        number:
+          min: 5
+          max: 100
+          step: 5
+          unit_of_measurement: "%"
+          mode: slider
+
+# ─────────────────────────────────────────────
+# Variables
+# ─────────────────────────────────────────────
+variables:
+  v_enable_a:      !input enable_zendure_a
+  v_enable_b:      !input enable_zendure_b
+  v_threshold:     !input export_threshold
+  v_grid:          !input grid_power_sensor
+  v_block_opt:     !input zendure_block_option
+  v_restore_opt:   !input zendure_restore_option
+  v_ap1:           !input apsystem_1_power
+  v_ap2:           !input apsystem_2_power
+
+# ─────────────────────────────────────────────
+# Déclencheurs
+# ─────────────────────────────────────────────
+trigger:
+  - trigger: numeric_state
+    entity_id: !input grid_power_sensor
+    below: 0
+    for:
+      seconds: !input export_duration
+    id: export_check
+
+  - trigger: numeric_state
+    entity_id: !input grid_power_sensor
+    above: !input restore_hysteresis
+    for:
+      seconds: !input restore_duration
+    id: restore
+
+  - trigger: numeric_state
+    entity_id: !input battery_soc_sensor
+    below: !input battery_low_threshold
+    id: battery_low
+
+# ─────────────────────────────────────────────
+# Actions
+# ─────────────────────────────────────────────
+action:
+  - choose:
+
+      # ══════════════════════════════════════
+      # CAS 1 — Export à réguler
+      # ══════════════════════════════════════
+      - conditions:
+          - condition: trigger
+            id: export_check
+          - condition: template
+            value_template: >
+              {{ states(v_grid) | float(0) < -(v_threshold | float(1000)) }}
+        sequence:
+          # 1. No-export Zendure A
+          - if:
+              - condition: template
+                value_template: "{{ v_enable_a }}"
+            then:
+              - action: select.select_option
+                target:
+                  entity_id: !input zendure_select_a
+                data:
+                  option: "{{ v_block_opt }}"
+          # 2. No-export Zendure B
+          - if:
+              - condition: template
+                value_template: "{{ v_enable_b }}"
+            then:
+              - action: select.select_option
+                target:
+                  entity_id: !input zendure_select_b
+                data:
+                  option: "{{ v_block_opt }}"
+          # 3. APsystems modulés : réduction de la moitié de l'export sur chaque onduleur
+          #    export_w = valeur absolue du flux réseau (négatif → export)
+          #    nouvelle limite = max(0, limite actuelle - export_w / 2)
+          - action: number.set_value
+            target:
+              entity_id: !input apsystem_1_power
+            data:
+              value: >
+                {{ [states(v_ap1) | float(980) - (states(v_grid) | float(0) | abs / 2), 0] | max | int }}
+          - action: number.set_value
+            target:
+              entity_id: !input apsystem_2_power
+            data:
+              value: >
+                {{ [states(v_ap2) | float(980) - (states(v_grid) | float(0) | abs / 2), 0] | max | int }}
+
+      # ══════════════════════════════════════
+      # CAS 2 — Restauration
+      # ══════════════════════════════════════
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: restore
+              - condition: trigger
+                id: battery_low
+        sequence:
+          # APsystems remis à puissance max
+          - action: number.set_value
+            target:
+              entity_id: !input apsystem_1_power
+            data:
+              value: !input apsystem_max_power
+          - action: number.set_value
+            target:
+              entity_id: !input apsystem_2_power
+            data:
+              value: !input apsystem_max_power
+          # Restaurer select Zendure A
+          - if:
+              - condition: template
+                value_template: "{{ v_enable_a }}"
+            then:
+              - action: select.select_option
+                target:
+                  entity_id: !input zendure_select_a
+                data:
+                  option: "{{ v_restore_opt }}"
+          # Restaurer select Zendure B
+          - if:
+              - condition: template
+                value_template: "{{ v_enable_b }}"
+            then:
+              - action: select.select_option
+                target:
+                  entity_id: !input zendure_select_b
+                data:
+                  option: "{{ v_restore_opt }}"
+
+mode: restart
